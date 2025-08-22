@@ -38,6 +38,7 @@ import com.google.genai.types.GoogleSearch;
 import com.google.genai.types.Part;
 import com.google.genai.types.SafetySetting;
 import com.google.genai.types.Schema;
+import com.google.genai.types.ThinkingConfig;
 import com.google.genai.types.Tool;
 import com.google.genai.types.FinishReason;
 import io.micrometer.observation.Observation;
@@ -416,7 +417,8 @@ public class GoogleGenAiChatModel implements ChatModel, DisposableBean {
 				Usage currentUsage = (usage.isPresent()) ? new DefaultUsage(usage.get().promptTokenCount().orElse(0),
 						usage.get().candidatesTokenCount().orElse(0)) : new EmptyUsage();
 				Usage cumulativeUsage = UsageCalculator.getCumulativeUsage(currentUsage, previousChatResponse);
-				ChatResponse chatResponse = new ChatResponse(generations, toChatResponseMetadata(cumulativeUsage));
+				ChatResponse chatResponse = new ChatResponse(generations,
+						toChatResponseMetadata(cumulativeUsage, generateContentResponse.modelVersion().get()));
 
 				observationContext.setResponse(chatResponse);
 				return chatResponse;
@@ -530,7 +532,8 @@ public class GoogleGenAiChatModel implements ChatModel, DisposableBean {
 					var usage = response.usageMetadata();
 					Usage currentUsage = usage.isPresent() ? getDefaultUsage(usage.get()) : new EmptyUsage();
 					Usage cumulativeUsage = UsageCalculator.getCumulativeUsage(currentUsage, previousChatResponse);
-					ChatResponse chatResponse = new ChatResponse(generations, toChatResponseMetadata(cumulativeUsage));
+					ChatResponse chatResponse = new ChatResponse(generations,
+							toChatResponseMetadata(cumulativeUsage, response.modelVersion().get()));
 					return Flux.just(chatResponse);
 				});
 
@@ -625,8 +628,8 @@ public class GoogleGenAiChatModel implements ChatModel, DisposableBean {
 		}
 	}
 
-	private ChatResponseMetadata toChatResponseMetadata(Usage usage) {
-		return ChatResponseMetadata.builder().usage(usage).build();
+	private ChatResponseMetadata toChatResponseMetadata(Usage usage, String modelVersion) {
+		return ChatResponseMetadata.builder().usage(usage).model(modelVersion).build();
 	}
 
 	private DefaultUsage getDefaultUsage(com.google.genai.types.GenerateContentResponseUsageMetadata usageMetadata) {
@@ -671,6 +674,10 @@ public class GoogleGenAiChatModel implements ChatModel, DisposableBean {
 		}
 		if (requestOptions.getPresencePenalty() != null) {
 			configBuilder.presencePenalty(requestOptions.getPresencePenalty().floatValue());
+		}
+		if (requestOptions.getThinkingBudget() != null) {
+			configBuilder
+				.thinkingConfig(ThinkingConfig.builder().thinkingBudget(requestOptions.getThinkingBudget()).build());
 		}
 
 		// Add safety settings
