@@ -16,6 +16,11 @@
 
 package org.springframework.ai.mcp.server.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
+
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerAutoConfiguration;
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStdioDisabledCondition;
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties;
@@ -29,16 +34,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.web.reactive.function.server.RouterFunction;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema;
-
 /**
  * @author Christian Tzolov
+ * @author Yanming Zhou
  */
 @AutoConfiguration(before = McpServerAutoConfiguration.class)
-@ConditionalOnClass({ McpSchema.class })
+@ConditionalOnClass(McpSchema.class)
 @EnableConfigurationProperties({ McpServerProperties.class, McpServerStreamableHttpProperties.class })
 @Conditional({ McpServerStdioDisabledCondition.class,
 		McpServerAutoConfiguration.EnabledStreamableServerCondition.class })
@@ -52,7 +53,7 @@ public class McpServerStreamableHttpWebFluxAutoConfiguration {
 		ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
 
 		return WebFluxStreamableServerTransportProvider.builder()
-			.objectMapper(objectMapper)
+			.jsonMapper(new JacksonMcpJsonMapper(objectMapper))
 			.messageEndpoint(serverProperties.getMcpEndpoint())
 			.keepAliveInterval(serverProperties.getKeepAliveInterval())
 			.disallowDelete(serverProperties.isDisallowDelete())
@@ -62,6 +63,7 @@ public class McpServerStreamableHttpWebFluxAutoConfiguration {
 	// Router function for streamable http transport used by Spring WebFlux to start an
 	// HTTP server.
 	@Bean
+	@ConditionalOnMissingBean(name = "webFluxStreamableServerRouterFunction")
 	public RouterFunction<?> webFluxStreamableServerRouterFunction(
 			WebFluxStreamableServerTransportProvider webFluxProvider) {
 		return webFluxProvider.getRouterFunction();

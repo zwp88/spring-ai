@@ -17,9 +17,8 @@
 package org.springframework.ai.mcp.server.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
-
 import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -27,6 +26,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.web.servlet.function.RouterFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 
 class McpServerStatelessWebMvcAutoConfigurationIT {
 
@@ -118,7 +119,7 @@ class McpServerStatelessWebMvcAutoConfigurationIT {
 		this.contextRunner
 			.withBean("customWebMvcProvider", WebMvcStatelessServerTransport.class,
 					() -> WebMvcStatelessServerTransport.builder()
-						.objectMapper(new ObjectMapper())
+						.jsonMapper(new JacksonMcpJsonMapper(new ObjectMapper()))
 						.messageEndpoint("/custom")
 						.build())
 			.run(context -> {
@@ -136,9 +137,22 @@ class McpServerStatelessWebMvcAutoConfigurationIT {
 			assertThat(context).hasSingleBean(WebMvcStatelessServerTransport.class);
 
 			// Verify that the RouterFunction is created from the provider
+			WebMvcStatelessServerTransport serverTransport = context.getBean(WebMvcStatelessServerTransport.class);
 			RouterFunction<?> routerFunction = context.getBean(RouterFunction.class);
-			assertThat(routerFunction).isNotNull();
+			assertThat(routerFunction).isNotNull().isEqualTo(serverTransport.getRouterFunction());
 		});
+	}
+
+	@Test
+	void routerFunctionIsCustom() {
+		this.contextRunner
+			.withBean("webMvcStatelessServerRouterFunction", RouterFunction.class, () -> mock(RouterFunction.class))
+			.run(context -> {
+				assertThat(context).hasSingleBean(RouterFunction.class);
+
+				RouterFunction<?> routerFunction = context.getBean(RouterFunction.class);
+				assertThat(mockingDetails(routerFunction).isMock()).isTrue();
+			});
 	}
 
 	@Test

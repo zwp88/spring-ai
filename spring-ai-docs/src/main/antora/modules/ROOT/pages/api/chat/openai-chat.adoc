@@ -120,6 +120,14 @@ The prefix `spring.ai.openai` is used as the property prefix that lets you conne
 TIP: For users that belong to multiple organizations (or are accessing their projects through their legacy user API key), you can optionally specify which organization and project is used for an API request.
 Usage from these API requests will count as usage for the specified organization and project.
 
+==== User-Agent Header
+
+Spring AI automatically sends a `User-Agent: spring-ai` header with all requests to OpenAI.
+This helps OpenAI identify requests originating from Spring AI for analytics and support purposes.
+This header is sent automatically and requires no configuration from Spring AI users.
+
+If you are an API provider building an OpenAI-compatible service, you can track Spring AI usage by reading the `User-Agent` HTTP header from incoming requests on your server.
+
 ==== Configuration Properties
 
 [NOTE]
@@ -172,11 +180,13 @@ The `JSON_SCHEMA` type enables link:https://platform.openai.com/docs/guides/stru
 | spring.ai.openai.chat.options.tools | A list of tools the model may call. Currently, only functions are supported as a tool. Use this to provide a list of functions the model may generate JSON inputs for. | -
 | spring.ai.openai.chat.options.toolChoice | Controls which (if any) function is called by the model. `none` means the model will not call a function and instead generates a message. `auto` means the model can pick between generating a message or calling a function. Specifying a particular function via `{"type: "function", "function": {"name": "my_function"}}` forces the model to call that function. `none` is the default when no functions are present. `auto` is the default if functions are present. | -
 | spring.ai.openai.chat.options.user | A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. | -
-| spring.ai.openai.chat.options.functions | List of functions, identified by their names, to enable for function calling in a single prompt requests. Functions with those names must exist in the `functionCallbacks` registry. | -
 | spring.ai.openai.chat.options.stream-usage | (For streaming only) Set to add an additional chunk with token usage statistics for the entire request. The `choices` field for this chunk is an empty array and all other chunks will also include a usage field, but with a null value. | false
 | spring.ai.openai.chat.options.parallel-tool-calls | Whether to enable link:https://platform.openai.com/docs/guides/function-calling/parallel-function-calling[parallel function calling] during tool use. | true
 | spring.ai.openai.chat.options.http-headers | Optional HTTP headers to be added to the chat completion request. To override the `api-key` you need to use an `Authorization` header key, and you have to prefix the key value with the `Bearer` prefix. | -
-| spring.ai.openai.chat.options.proxy-tool-calls | If true, the Spring AI will not handle the function calls internally, but will proxy them to the client. Then is the client's responsibility to handle the function calls, dispatch them to the appropriate function, and return the results. If false (the default), the Spring AI will handle the function calls internally. Applicable only for chat models with function calling support | false
+| spring.ai.openai.chat.options.tool-names | List of tools, identified by their names, to enable for function calling in a single prompt request. Tools with those names must exist in the ToolCallback registry. | -
+| spring.ai.openai.chat.options.tool-callbacks | Tool Callbacks to register with the ChatModel. | -
+| spring.ai.openai.chat.options.internal-tool-execution-enabled | If false, the Spring AI will not handle the tool calls internally, but will proxy them to the client. Then it is the client's responsibility to handle the tool calls, dispatch them to the appropriate function, and return the results. If true (the default), the Spring AI will handle the function calls internally. Applicable only for chat models with function calling support | true
+| spring.ai.openai.chat.options.service-tier | Specifies the link:https://platform.openai.com/docs/api-reference/responses/create#responses_create-service_tier[processing type] used for serving the request. | -
 |====
 
 [NOTE]
@@ -663,6 +673,46 @@ Follow the https://github.com/spring-projects/spring-ai/blob/main/models/spring-
 
 * The link:https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-openai/src/test/java/org/springframework/ai/openai/api/tool/OpenAiApiToolFunctionCallIT.java[OpenAiApiToolFunctionCallIT.java] tests show how to use the low-level API to call tool functions.
 Based on the link:https://platform.openai.com/docs/guides/function-calling/parallel-function-calling[OpenAI Function Calling] tutorial.
+
+== Low-level OpenAiFileApi Client [[low-level-file-api]]
+
+The https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/api/OpenAiFileApi.java[OpenAiFileApi] provides a lightweight Java client for the OpenAI Files API, enabling file management operations such as uploading, listing, retrieving, deleting files, and accessing file contents. link:https://platform.openai.com/docs/api-reference/files[OpenAI File API]
+
+Here is a simple snippet showing how to use the API programmatically:
+
+[source,java]
+----
+OpenAiFileApi openAiFileApi = OpenAiFileApi.builder()
+			.apiKey(new SimpleApiKey(System.getenv("OPENAI_API_KEY")))
+			.build();
+
+// Upload a file
+byte[] fileBytes = Files.readAllBytes(Paths.get("evals.jsonl")); 
+OpenAiFileApi.UploadFileRequest uploadRequest = OpenAiFileApi.UploadFileRequest.builder()
+			.file(fileBytes)
+			.fileName("evals-data.jsonl")
+			.purpose(OpenAiFileApi.Purpose.EVALS)
+			.build();
+ResponseEntity<OpenAiFileApi.FileObject> uploadResponse = openAiFileApi.uploadFile(uploadRequest);
+
+// List files
+OpenAiFileApi.ListFileRequest listRequest = OpenAiFileApi.ListFileRequest.builder()
+			.purpose(OpenAiFileApi.Purpose.EVALS)
+			.build();
+ResponseEntity<OpenAiFileApi.FileObjectResponse> listResponse = openAiFileApi.listFiles(listRequest);
+
+// Retrieve file information
+ResponseEntity<OpenAiFileApi.FileObject> fileInfo = openAiFileApi.retrieveFile("file-id");
+
+// Delete a file
+ResponseEntity<OpenAiFileApi.DeleteFileResponse> deleteResponse = openAiFileApi.deleteFile("file-id");
+
+// Retrieve file content
+ResponseEntity<String> fileContent = openAiFileApi.retrieveFileContent("file-id");
+----
+
+=== Low-level File API Examples
+* The link:https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-openai/src/test/java/org/springframework/ai/openai/api/OpenAiFileApiIT.java[OpenAiFileApiIT.java] tests provide some general examples of how to use the lightweight file api library.
 
 == API Key Management
 

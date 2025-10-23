@@ -17,12 +17,12 @@
 package org.springframework.ai.mcp.server.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerAutoConfiguration;
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStdioDisabledCondition;
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties;
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -63,12 +63,12 @@ import org.springframework.web.servlet.function.ServerResponse;
  * @author Christian Tzolov
  * @author Yanming Zhou
  * @since 1.0.0
- * @see McpServerProperties
+ * @see McpServerSseProperties
  * @see WebMvcSseServerTransportProvider
  */
 @AutoConfiguration(before = McpServerAutoConfiguration.class)
-@EnableConfigurationProperties({ McpServerSseProperties.class })
-@ConditionalOnClass({ WebMvcSseServerTransportProvider.class })
+@EnableConfigurationProperties(McpServerSseProperties.class)
+@ConditionalOnClass(WebMvcSseServerTransportProvider.class)
 @ConditionalOnMissingBean(McpServerTransportProvider.class)
 @Conditional({ McpServerStdioDisabledCondition.class, McpServerAutoConfiguration.EnabledSseServerCondition.class })
 public class McpServerSseWebMvcAutoConfiguration {
@@ -81,7 +81,7 @@ public class McpServerSseWebMvcAutoConfiguration {
 		ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
 
 		return WebMvcSseServerTransportProvider.builder()
-			.objectMapper(objectMapper)
+			.jsonMapper(new JacksonMcpJsonMapper(objectMapper))
 			.baseUrl(serverProperties.getBaseUrl())
 			.sseEndpoint(serverProperties.getSseEndpoint())
 			.messageEndpoint(serverProperties.getSseMessageEndpoint())
@@ -90,7 +90,9 @@ public class McpServerSseWebMvcAutoConfiguration {
 	}
 
 	@Bean
-	public RouterFunction<ServerResponse> mvcMcpRouterFunction(WebMvcSseServerTransportProvider transportProvider) {
+	@ConditionalOnMissingBean(name = "webMvcSseServerRouterFunction")
+	public RouterFunction<ServerResponse> webMvcSseServerRouterFunction(
+			WebMvcSseServerTransportProvider transportProvider) {
 		return transportProvider.getRouterFunction();
 	}
 

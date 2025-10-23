@@ -16,6 +16,11 @@
 
 package org.springframework.ai.mcp.server.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStatelessAutoConfiguration;
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStdioDisabledCondition;
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties;
@@ -27,17 +32,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.web.servlet.function.RouterFunction;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
-import io.modelcontextprotocol.spec.McpSchema;
+import org.springframework.web.servlet.function.ServerResponse;
 
 /**
  * @author Christian Tzolov
+ * @author Yanming Zhou
  */
 @AutoConfiguration(before = McpServerStatelessAutoConfiguration.class)
-@ConditionalOnClass({ McpSchema.class })
+@ConditionalOnClass(McpSchema.class)
 @EnableConfigurationProperties(McpServerStreamableHttpProperties.class)
 @Conditional({ McpServerStdioDisabledCondition.class,
 		McpServerStatelessAutoConfiguration.EnabledStatelessServerCondition.class })
@@ -51,7 +53,7 @@ public class McpServerStatelessWebMvcAutoConfiguration {
 		ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
 
 		return WebMvcStatelessServerTransport.builder()
-			.objectMapper(objectMapper)
+			.jsonMapper(new JacksonMcpJsonMapper(objectMapper))
 			.messageEndpoint(serverProperties.getMcpEndpoint())
 			// .disallowDelete(serverProperties.isDisallowDelete())
 			.build();
@@ -60,7 +62,8 @@ public class McpServerStatelessWebMvcAutoConfiguration {
 	// Router function for stateless http transport used by Spring WebFlux to start an
 	// HTTP server.
 	@Bean
-	public RouterFunction<?> webMvcStatelessServerRouterFunction(
+	@ConditionalOnMissingBean(name = "webMvcStatelessServerRouterFunction")
+	public RouterFunction<ServerResponse> webMvcStatelessServerRouterFunction(
 			WebMvcStatelessServerTransport webMvcStatelessTransport) {
 		return webMvcStatelessTransport.getRouterFunction();
 	}

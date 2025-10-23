@@ -16,6 +16,11 @@
 
 package org.springframework.ai.mcp.server.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.server.transport.WebFluxStatelessServerTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStatelessAutoConfiguration;
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStdioDisabledCondition;
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties;
@@ -28,16 +33,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.web.reactive.function.server.RouterFunction;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.server.transport.WebFluxStatelessServerTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-
 /**
  * @author Christian Tzolov
+ * @author Yanming Zhou
  */
 @AutoConfiguration(before = McpServerStatelessAutoConfiguration.class)
-@ConditionalOnClass({ McpSchema.class })
+@ConditionalOnClass(McpSchema.class)
 @EnableConfigurationProperties(McpServerStreamableHttpProperties.class)
 @Conditional({ McpServerStdioDisabledCondition.class,
 		McpServerStatelessAutoConfiguration.EnabledStatelessServerCondition.class })
@@ -51,7 +52,7 @@ public class McpServerStatelessWebFluxAutoConfiguration {
 		ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
 
 		return WebFluxStatelessServerTransport.builder()
-			.objectMapper(objectMapper)
+			.jsonMapper(new JacksonMcpJsonMapper(objectMapper))
 			.messageEndpoint(serverProperties.getMcpEndpoint())
 			// .disallowDelete(serverProperties.isDisallowDelete())
 			.build();
@@ -60,6 +61,7 @@ public class McpServerStatelessWebFluxAutoConfiguration {
 	// Router function for stateless http transport used by Spring WebFlux to start an
 	// HTTP server.
 	@Bean
+	@ConditionalOnMissingBean(name = "webFluxStatelessServerRouterFunction")
 	public RouterFunction<?> webFluxStatelessServerRouterFunction(
 			WebFluxStatelessServerTransport webFluxStatelessTransport) {
 		return webFluxStatelessTransport.getRouterFunction();

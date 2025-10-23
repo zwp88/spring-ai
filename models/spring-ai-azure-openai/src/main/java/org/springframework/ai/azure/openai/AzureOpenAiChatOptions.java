@@ -31,9 +31,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.lang.Nullable;
@@ -573,7 +573,7 @@ public class AzureOpenAiChatOptions implements ToolCallingChatOptions {
 				this.temperature, this.topP);
 	}
 
-	public static class Builder {
+	public static final class Builder {
 
 		protected AzureOpenAiChatOptions options;
 

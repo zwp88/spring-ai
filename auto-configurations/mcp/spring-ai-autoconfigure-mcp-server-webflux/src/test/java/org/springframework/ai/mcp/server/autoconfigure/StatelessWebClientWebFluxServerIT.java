@@ -16,41 +16,13 @@
 
 package org.springframework.ai.mcp.server.autoconfigure;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.model.ToolContext;
-import org.springframework.ai.mcp.McpToolUtils;
-import org.springframework.ai.mcp.client.common.autoconfigure.McpClientAutoConfiguration;
-import org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration;
-import org.springframework.ai.mcp.client.webflux.autoconfigure.StreamableHttpWebFluxTransportAutoConfiguration;
-import org.springframework.ai.mcp.customizer.McpSyncClientCustomizer;
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties;
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties;
-import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStatelessAutoConfiguration;
-import org.springframework.ai.mcp.server.common.autoconfigure.StatelessToolCallbackConverterAutoConfiguration;
-import org.springframework.ai.tool.function.FunctionToolCallback;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.AutoConfigurations;
-import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.core.ResolvableType;
-import org.springframework.http.server.reactive.HttpHandler;
-import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
-import org.springframework.test.util.TestSocketUtils;
-import org.springframework.web.reactive.function.server.RouterFunction;
-import org.springframework.web.reactive.function.server.RouterFunctions;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.modelcontextprotocol.server.McpStatelessSyncServer;
 import io.modelcontextprotocol.server.transport.WebFluxStatelessServerTransport;
@@ -69,10 +41,39 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
+import org.junit.jupiter.api.Test;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.mcp.McpToolUtils;
+import org.springframework.ai.mcp.client.common.autoconfigure.McpClientAutoConfiguration;
+import org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration;
+import org.springframework.ai.mcp.client.webflux.autoconfigure.StreamableHttpWebFluxTransportAutoConfiguration;
+import org.springframework.ai.mcp.customizer.McpSyncClientCustomizer;
+import org.springframework.ai.mcp.server.common.autoconfigure.McpServerStatelessAutoConfiguration;
+import org.springframework.ai.mcp.server.common.autoconfigure.StatelessToolCallbackConverterAutoConfiguration;
+import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties;
+import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties;
+import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.ResolvableType;
+import org.springframework.http.server.reactive.HttpHandler;
+import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
+import org.springframework.test.util.TestSocketUtils;
+import org.springframework.web.reactive.function.server.RouterFunction;
+import org.springframework.web.reactive.function.server.RouterFunctions;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.map;
+
 public class StatelessWebClientWebFluxServerIT {
+
+	private static final JacksonMcpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new ObjectMapper());
 
 	private final ApplicationContextRunner serverContextRunner = new ApplicationContextRunner()
 		.withPropertyValues("spring.ai.mcp.server.protocol=STATELESS")
@@ -113,7 +114,7 @@ public class StatelessWebClientWebFluxServerIT {
 
 				var httpServer = startHttpServer(serverContext, serverPort);
 
-				clientApplicationContext.withUserConfiguration(TestMcpClientConfiguration.class)
+				this.clientApplicationContext.withUserConfiguration(TestMcpClientConfiguration.class)
 					.withPropertyValues(// @formatter:off
 						"spring.ai.mcp.client.streamable-http.connections.server1.url=http://localhost:" + serverPort,
 						"spring.ai.mcp.client.initialized=false") // @formatter:on
@@ -127,14 +128,17 @@ public class StatelessWebClientWebFluxServerIT {
 
 						// tool list
 						assertThat(mcpClient.listTools().tools()).hasSize(3);
-						assertThat(mcpClient.listTools().tools())
-							.contains(Tool.builder().name("tool1").description("tool1 description").inputSchema("""
+						assertThat(mcpClient.listTools().tools()).contains(Tool.builder()
+							.name("tool1")
+							.description("tool1 description")
+							.inputSchema(jsonMapper, """
 									{
 										"": "http://json-schema.org/draft-07/schema#",
 										"type": "object",
 										"properties": {}
 									}
-									""").build());
+									""")
+							.build());
 
 						// Call a tool that sends progress notifications
 						CallToolRequest toolRequest = CallToolRequest.builder()
@@ -159,14 +163,18 @@ public class StatelessWebClientWebFluxServerIT {
 
 						assertThat(calculatorToolResponse.structuredContent()).isNotNull();
 
-						assertThat(calculatorToolResponse.structuredContent()).containsEntry("result", 5.0)
+						assertThat(calculatorToolResponse.structuredContent())
+							.asInstanceOf(map(String.class, Object.class))
+							.containsEntry("result", 5.0)
 							.containsEntry("operation", "2 + 3")
 							.containsEntry("timestamp", "2024-01-01T10:00:00Z");
 
-						assertThatJson(calculatorToolResponse.structuredContent()).when(Option.IGNORING_ARRAY_ORDER)
+						net.javacrumbs.jsonunit.assertj.JsonAssertions
+							.assertThatJson(calculatorToolResponse.structuredContent())
+							.when(Option.IGNORING_ARRAY_ORDER)
 							.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 							.isObject()
-							.isEqualTo(json("""
+							.isEqualTo(net.javacrumbs.jsonunit.assertj.JsonAssertions.json("""
 									{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
 
 						// TOOL FROM MCP TOOL UTILS
@@ -221,6 +229,28 @@ public class StatelessWebClientWebFluxServerIT {
 			});
 	}
 
+	// Helper methods to start and stop the HTTP server
+	private static DisposableServer startHttpServer(ApplicationContext serverContext, int port) {
+		WebFluxStatelessServerTransport mcpStatelessServerTransport = serverContext
+			.getBean(WebFluxStatelessServerTransport.class);
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpStatelessServerTransport.getRouterFunction());
+		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
+		return HttpServer.create().port(port).handle(adapter).bindNow();
+	}
+
+	private static void stopHttpServer(DisposableServer server) {
+		if (server != null) {
+			server.disposeNow();
+		}
+	}
+
+	// Helper method to get the MCP sync client
+	private static McpSyncClient getMcpSyncClient(ApplicationContext clientContext) {
+		ObjectProvider<List<McpSyncClient>> mcpClients = clientContext
+			.getBeanProvider(ResolvableType.forClassWithGenerics(List.class, McpSyncClient.class));
+		return mcpClients.getIfAvailable().get(0);
+	}
+
 	public static class TestMcpServerConfiguration {
 
 		@Bean
@@ -229,17 +259,14 @@ public class StatelessWebClientWebFluxServerIT {
 			// Tool 1
 			McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 				.builder()
-				.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema("""
+				.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(jsonMapper, """
 						{
 							"": "http://json-schema.org/draft-07/schema#",
 							"type": "object",
 							"properties": {}
 						}
 						""").build())
-				.callHandler((exchange, request) -> {
-
-					return new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
-				})
+				.callHandler((exchange, request) -> new CallToolResult(List.of(new TextContent("CALL RESPONSE")), null))
 				.build();
 
 			// Tool 2
@@ -280,9 +307,6 @@ public class StatelessWebClientWebFluxServerIT {
 					.build(), null);
 
 			return List.of(tool1, tool2, tool3);
-		}
-
-		record ToUpperCaseRequest(String input) {
 		}
 
 		@Bean
@@ -359,6 +383,9 @@ public class StatelessWebClientWebFluxServerIT {
 			};
 		}
 
+		record ToUpperCaseRequest(String input) {
+		}
+
 	}
 
 	public static class TestMcpClientConfiguration {
@@ -372,28 +399,6 @@ public class StatelessWebClientWebFluxServerIT {
 			};
 		}
 
-	}
-
-	// Helper methods to start and stop the HTTP server
-	private static DisposableServer startHttpServer(ApplicationContext serverContext, int port) {
-		WebFluxStatelessServerTransport mcpStatelessServerTransport = serverContext
-			.getBean(WebFluxStatelessServerTransport.class);
-		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpStatelessServerTransport.getRouterFunction());
-		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
-		return HttpServer.create().port(port).handle(adapter).bindNow();
-	}
-
-	private static void stopHttpServer(DisposableServer server) {
-		if (server != null) {
-			server.disposeNow();
-		}
-	}
-
-	// Helper method to get the MCP sync client
-	private static McpSyncClient getMcpSyncClient(ApplicationContext clientContext) {
-		ObjectProvider<List<McpSyncClient>> mcpClients = clientContext
-			.getBeanProvider(ResolvableType.forClassWithGenerics(List.class, McpSyncClient.class));
-		return mcpClients.getIfAvailable().get(0);
 	}
 
 }
